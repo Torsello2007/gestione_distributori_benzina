@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Distributori Milano e Monza</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #map { height: 600px; width: 100%; margin-bottom: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid black; padding: 5px; text-align: center; }
+        form { margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Distributori Milano e Monza</h1>
+
+    <h2>Cambia Prezzi per Provincia</h2>
+    <form id="form-prezzi">
+        <label>Provincia:
+            <select name="provincia" required>
+                <option value="MI">Milano (MI)</option>
+                <option value="MB">Monza (MB)</option>
+            </select>
+        </label>
+        <label>Prezzo Benzina:
+            <input type="number" step="0.01" name="benzina" required>
+        </label>
+        <label>Prezzo Diesel:
+            <input type="number" step="0.01" name="diesel" required>
+        </label>
+        <button type="submit">Aggiorna Prezzi</button>
+    </form>
+
+    <div id="map"></div>
+
+    <h2>Elenco distributori</h2>
+    <table id="tabella-distributori">
+        <thead>
+            <tr>
+                <th>ID</th><th>Città</th><th>Provincia</th><th>Benzina (L)</th><th>Diesel (L)</th><th>Prezzo Benzina</th><th>Prezzo Diesel</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Dati caricati via JS -->
+        </tbody>
+    </table>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const map = L.map('map').setView([45.5, 9.2], 10);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        async function caricaDistributori() {
+            const response = await fetch("/api/distributori");
+            const distributori = await response.json();
+
+            const tbody = document.querySelector("#tabella-distributori tbody");
+            tbody.innerHTML = "";
+
+            distributori.forEach(d => {
+                // Popola tabella
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${d.id}</td>
+                    <td>${d.citta}</td>
+                    <td>${d.provincia}</td>
+                    <td>${d.benzina_litri}</td>
+                    <td>${d.diesel_litri}</td>
+                    <td>${d.prezzo_benzina}</td>
+                    <td>${d.prezzo_diesel}</td>
+                `;
+                tbody.appendChild(tr);
+
+                // Popola mappa
+                const colore = d.provincia === "MI" ? "blue" : "red";
+                const marker = L.circleMarker([d.lat, d.lon], {color: colore, radius: 8}).addTo(map);
+                marker.bindPopup(
+                    `<b>${d.citta} (${d.provincia})</b><br>` +
+                    `Benzina: ${d.benzina_litri} L @ ${d.prezzo_benzina} €/L<br>` +
+                    `Diesel: ${d.diesel_litri} L @ ${d.prezzo_diesel} €/L`
+                );
+            });
+        }
+
+        document.getElementById("form-prezzi").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const provincia = formData.get("provincia");
+            const benzina = parseFloat(formData.get("benzina"));
+            const diesel = parseFloat(formData.get("diesel"));
+
+            try {
+                const response = await fetch(`/api/distributori/prezzi/${provincia}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ benzina, diesel })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    alert(data.error);  // Mostra errore se prezzo negativo
+                } else {
+                    caricaDistributori();  // Ricarica dati aggiornati
+                }
+            } catch (err) {
+                alert("Errore di connessione al server");
+            }
+        });
+
+        caricaDistributori(); // caricamento iniziale
+    </script>
+</body>
+</html>
